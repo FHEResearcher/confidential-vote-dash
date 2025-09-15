@@ -1,26 +1,18 @@
-import { useState } from "react";
+import { useAccount } from 'wagmi';
 import { WalletConnect } from "@/components/WalletConnect";
 import { VotingDashboard } from "@/components/VotingDashboard";
 
 const Index = () => {
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const { address, isConnected } = useAccount();
 
-  const handleWalletConnect = (address: string) => {
-    setWalletAddress(address);
-  };
-
-  const handleWalletDisconnect = () => {
-    setWalletAddress(null);
-  };
-
-  if (!walletAddress) {
-    return <WalletConnect onConnect={handleWalletConnect} />;
+  if (!isConnected || !address) {
+    return <WalletConnect onConnect={() => {}} />;
   }
 
   return (
     <VotingDashboard 
-      walletAddress={walletAddress} 
-      onDisconnect={handleWalletDisconnect} 
+      walletAddress={address} 
+      onDisconnect={() => {}} 
     />
   );
 };

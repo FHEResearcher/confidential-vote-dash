@@ -1,31 +1,12 @@
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { Card, CardContent } from "@/components/ui/card";
 import { Wallet, Shield, Vote } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 
 interface WalletConnectProps {
   onConnect: (address: string) => void;
 }
 
 export const WalletConnect = ({ onConnect }: WalletConnectProps) => {
-  const [isConnecting, setIsConnecting] = useState(false);
-  const { toast } = useToast();
-
-  const handleConnect = async () => {
-    setIsConnecting(true);
-    
-    // Simulate wallet connection
-    setTimeout(() => {
-      const mockAddress = "0x" + Math.random().toString(16).substr(2, 40);
-      onConnect(mockAddress);
-      toast({
-        title: "Wallet Connected",
-        description: "You're now ready to participate in judging.",
-      });
-      setIsConnecting(false);
-    }, 1500);
-  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-secondary p-4">
@@ -59,23 +40,112 @@ export const WalletConnect = ({ onConnect }: WalletConnectProps) => {
             </div>
           </div>
 
-          <Button 
-            onClick={handleConnect}
-            disabled={isConnecting}
-            className="w-full bg-gradient-primary hover:shadow-glow-primary transition-all duration-300"
-          >
-            {isConnecting ? (
-              <>
-                <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2" />
-                Connecting...
-              </>
-            ) : (
-              <>
-                <Wallet className="w-4 h-4 mr-2" />
-                Connect Wallet
-              </>
-            )}
-          </Button>
+          <div className="w-full">
+            <ConnectButton.Custom>
+              {({
+                account,
+                chain,
+                openAccountModal,
+                openChainModal,
+                openConnectModal,
+                authenticationStatus,
+                mounted,
+              }) => {
+                // Note: If your app doesn't use authentication, you
+                // can remove all 'authenticationStatus' checks
+                const ready = mounted && authenticationStatus !== 'loading';
+                const connected =
+                  ready &&
+                  account &&
+                  chain &&
+                  (!authenticationStatus ||
+                    authenticationStatus === 'authenticated');
+
+                return (
+                  <div
+                    {...(!ready && {
+                      'aria-hidden': true,
+                      'style': {
+                        opacity: 0,
+                        pointerEvents: 'none',
+                        userSelect: 'none',
+                      },
+                    })}
+                  >
+                    {(() => {
+                      if (!connected) {
+                        return (
+                          <button
+                            onClick={openConnectModal}
+                            type="button"
+                            className="w-full bg-gradient-primary hover:shadow-glow-primary transition-all duration-300 text-primary-foreground font-medium py-3 px-4 rounded-lg flex items-center justify-center"
+                          >
+                            <Wallet className="w-4 h-4 mr-2" />
+                            Connect Wallet
+                          </button>
+                        );
+                      }
+
+                      if (chain.unsupported) {
+                        return (
+                          <button
+                            onClick={openChainModal}
+                            type="button"
+                            className="w-full bg-red-500 hover:bg-red-600 transition-all duration-300 text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center"
+                          >
+                            Wrong network
+                          </button>
+                        );
+                      }
+
+                      return (
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={openChainModal}
+                            type="button"
+                            className="flex items-center space-x-2 bg-muted hover:bg-muted/80 transition-all duration-300 text-foreground font-medium py-2 px-3 rounded-lg"
+                          >
+                            {chain.hasIcon && (
+                              <div
+                                style={{
+                                  background: chain.iconBackground,
+                                  width: 12,
+                                  height: 12,
+                                  borderRadius: 999,
+                                  overflow: 'hidden',
+                                  marginRight: 4,
+                                }}
+                              >
+                                {chain.iconUrl && (
+                                  <img
+                                    alt={chain.name ?? 'Chain icon'}
+                                    src={chain.iconUrl}
+                                    style={{ width: 12, height: 12 }}
+                                  />
+                                )}
+                              </div>
+                            )}
+                            {chain.name}
+                          </button>
+
+                          <button
+                            onClick={openAccountModal}
+                            type="button"
+                            className="flex items-center space-x-2 bg-primary hover:bg-primary/90 transition-all duration-300 text-primary-foreground font-medium py-2 px-3 rounded-lg"
+                          >
+                            {account.displayName}
+                            {account.displayBalance
+                              ? ` (${account.displayBalance})`
+                              : ''}
+                          </button>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                );
+              }}
+            </ConnectButton.Custom>
+          </div>
 
           <p className="text-xs text-muted-foreground">
             Your votes are encrypted and anonymous until the reveal phase
