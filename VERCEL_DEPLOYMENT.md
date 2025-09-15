@@ -60,13 +60,13 @@ This guide provides step-by-step instructions for deploying the Confidential Vot
    # Enter: 11155111
    
    vercel env add VITE_RPC_URL
-   # Enter: https://sepolia.infura.io/v3/b18fb7e6ca7045ac83c41157ab93f990
+   # Enter: https://sepolia.infura.io/v3/YOUR_INFURA_KEY
    
    vercel env add VITE_WALLET_CONNECT_PROJECT_ID
-   # Enter: 2ec9743d0d0cd7fb94dee1a7e6d33475
+   # Enter: YOUR_WALLET_CONNECT_PROJECT_ID
    
    vercel env add VITE_INFURA_API_KEY
-   # Enter: b18fb7e6ca7045ac83c41157ab93f990
+   # Enter: YOUR_INFURA_API_KEY
    ```
 
 6. **Redeploy with environment variables**:
@@ -99,9 +99,9 @@ This guide provides step-by-step instructions for deploying the Confidential Vot
    | Name | Value |
    |------|-------|
    | `VITE_CHAIN_ID` | `11155111` |
-   | `VITE_RPC_URL` | `https://sepolia.infura.io/v3/b18fb7e6ca7045ac83c41157ab93f990` |
-   | `VITE_WALLET_CONNECT_PROJECT_ID` | `2ec9743d0d0cd7fb94dee1a7e6d33475` |
-   | `VITE_INFURA_API_KEY` | `b18fb7e6ca7045ac83c41157ab93f990` |
+   | `VITE_RPC_URL` | `https://sepolia.infura.io/v3/YOUR_INFURA_KEY` |
+   | `VITE_WALLET_CONNECT_PROJECT_ID` | `YOUR_WALLET_CONNECT_PROJECT_ID` |
+   | `VITE_INFURA_API_KEY` | `YOUR_INFURA_API_KEY` |
 
 6. **Deploy**:
    - Click "Deploy"
@@ -213,9 +213,9 @@ This guide provides step-by-step instructions for deploying the Confidential Vot
 | Variable | Description | Example Value |
 |----------|-------------|---------------|
 | `VITE_CHAIN_ID` | Ethereum chain ID | `11155111` (Sepolia) |
-| `VITE_RPC_URL` | RPC endpoint URL | `https://sepolia.infura.io/v3/...` |
-| `VITE_WALLET_CONNECT_PROJECT_ID` | WalletConnect project ID | `2ec9743d0d0cd7fb94dee1a7e6d33475` |
-| `VITE_INFURA_API_KEY` | Infura API key | `b18fb7e6ca7045ac83c41157ab93f990` |
+| `VITE_RPC_URL` | RPC endpoint URL | `https://sepolia.infura.io/v3/YOUR_INFURA_KEY` |
+| `VITE_WALLET_CONNECT_PROJECT_ID` | WalletConnect project ID | `YOUR_WALLET_CONNECT_PROJECT_ID` |
+| `VITE_INFURA_API_KEY` | Infura API key | `YOUR_INFURA_API_KEY` |
 | `VITE_VOTING_CONTRACT_ADDRESS` | Deployed contract address | `0x...` |
 | `VITE_FHE_CONTRACT_ADDRESS` | FHE contract address | `0x...` |
 

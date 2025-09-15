@@ -2,20 +2,37 @@
   <defs>
     <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1d4ed8;stop-opacity:1" />
     </linearGradient>
-    <linearGradient id="backgroundGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#1e293b;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#0f172a;stop-opacity:1" />
+    <linearGradient id="checkGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
     </linearGradient>
   </defs>
   
-  <!-- Background circle -->
-  <circle cx="16" cy="16" r="15" fill="url(#backgroundGradient)" stroke="url(#shieldGradient)" stroke-width="2"/>
+  <!-- Shield Background -->
+  <path d="M16 2L6 6V16C6 22.6274 10.3726 28 16 28C21.6274 28 26 22.6274 26 16V6L16 2Z" 
+        fill="url(#shieldGradient)" 
+        stroke="#1e40af" 
+        stroke-width="1.5"/>
   
-  <!-- Shield icon -->
-  <path d="M16 4L22 8V16C22 20.5 16 28 16 28S10 20.5 10 16V8L16 4Z" fill="url(#shieldGradient)" stroke="white" stroke-width="1" stroke-linejoin="round"/>
+  <!-- Shield Inner -->
+  <path d="M16 4L8 7V16C8 21.5228 11.4772 25 16 25C20.5228 25 24 21.5228 24 16V7L16 4Z" 
+        fill="none" 
+        stroke="#ffffff" 
+        stroke-width="1" 
+        opacity="0.3"/>
   
-  <!-- FHE text -->
-  <text x="16" y="24" font-family="Arial, sans-serif" font-size="6" font-weight="bold" text-anchor="middle" fill="white">FHE</text>
+  <!-- Check Mark -->
+  <path d="M12 16L14.5 18.5L20 13" 
+        stroke="url(#checkGradient)" 
+        stroke-width="2.5" 
+        stroke-linecap="round" 
+        stroke-linejoin="round"/>
+  
+  <!-- Encryption Dots -->
+  <circle cx="10" cy="10" r="1" fill="#ffffff" opacity="0.6"/>
+  <circle cx="22" cy="10" r="1" fill="#ffffff" opacity="0.6"/>
+  <circle cx="10" cy="22" r="1" fill="#ffffff" opacity="0.6"/>
+  <circle cx="22" cy="22" r="1" fill="#ffffff" opacity="0.6"/>
 </svg>
