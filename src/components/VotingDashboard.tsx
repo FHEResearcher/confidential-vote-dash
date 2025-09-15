@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,9 +18,12 @@ import {
   Unlock,
   Timer,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { contractVotingUtils, ProjectInfo, VotingSessionInfo } from "@/lib/contract-utils";
+import { fheVotingUtils } from "@/lib/fhe-utils";
 
 interface Project {
   id: string;
@@ -30,6 +33,8 @@ interface Project {
   category: string;
   hasVoted: boolean;
   score?: number;
+  voteId?: number;
+  encryptedVote?: string;
 }
 
 interface VotingDashboardProps {
@@ -66,12 +71,71 @@ const mockProjects: Project[] = [
 ];
 
 export const VotingDashboard = ({ walletAddress, onDisconnect }: VotingDashboardProps) => {
-  const [projects, setProjects] = useState(mockProjects);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [votingProject, setVotingProject] = useState<string | null>(null);
   const [resultsRevealed, setResultsRevealed] = useState(false);
   const [showVoteConfirm, setShowVoteConfirm] = useState(false);
   const [pendingVote, setPendingVote] = useState<{projectId: string, score: number, projectName: string} | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [currentSession, setCurrentSession] = useState<VotingSessionInfo | null>(null);
   const { toast } = useToast();
+
+  // Load projects and session data on component mount
+  useEffect(() => {
+    loadVotingData();
+  }, []);
+
+  const loadVotingData = async () => {
+    try {
+      setLoading(true);
+      
+      // Load current voting session
+      const sessionCount = await contractVotingUtils.getSessionCount();
+      if (sessionCount > 0) {
+        const sessionInfo = await contractVotingUtils.getVotingSessionInfo(0);
+        setCurrentSession(sessionInfo);
+        
+        if (sessionInfo) {
+          // Load projects for this session
+          const projectPromises = sessionInfo.projectIds.map(async (projectId) => {
+            const projectInfo = await contractVotingUtils.getProjectInfo(Number(projectId));
+            const hasVoted = await contractVotingUtils.hasUserVoted(walletAddress, 0);
+            
+            return {
+              id: projectId.toString(),
+              name: projectInfo?.name || `Project ${projectId}`,
+              description: projectInfo?.description || `Description for project ${projectId}`,
+              team: projectInfo?.team || `Team ${projectId}`,
+              category: projectInfo?.category || 'Technology',
+              hasVoted,
+              score: undefined,
+              voteId: undefined,
+              encryptedVote: undefined
+            };
+          });
+          
+          const loadedProjects = await Promise.all(projectPromises);
+          setProjects(loadedProjects);
+          
+          // Check if results are revealed
+          setResultsRevealed(sessionInfo.resultsRevealed);
+        }
+      } else {
+        // Fallback to mock data if no session exists
+        setProjects(mockProjects);
+      }
+    } catch (error) {
+      console.error('Failed to load voting data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load voting data. Using demo data.",
+        variant: "destructive"
+      });
+      setProjects(mockProjects);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleVoteClick = (projectId: string, score: number) => {
     const project = projects.find(p => p.id === projectId);
@@ -85,29 +149,62 @@ export const VotingDashboard = ({ walletAddress, onDisconnect }: VotingDashboard
     }
   };
 
-  const confirmVote = () => {
+  const confirmVote = async () => {
     if (pendingVote) {
       setVotingProject(pendingVote.projectId);
       
-      // Simulate encryption delay
-      setTimeout(() => {
-        setProjects(prev => 
-          prev.map(p => 
-            p.id === pendingVote.projectId 
-              ? { ...p, hasVoted: true, score: pendingVote.score }
-              : p
-          )
+      try {
+        // Encrypt vote data using FHE
+        const encryptedVote = await fheVotingUtils.encryptVote({
+          projectId: parseInt(pendingVote.projectId),
+          score: pendingVote.score,
+          sessionId: 0, // Current session
+          voterAddress: walletAddress
+        });
+
+        // Cast vote on blockchain
+        const result = await contractVotingUtils.castVote(
+          parseInt(pendingVote.projectId),
+          0, // Current session
+          pendingVote.score,
+          walletAddress
         );
-        
+
+        if (result.success) {
+          // Update local state
+          setProjects(prev => 
+            prev.map(p => 
+              p.id === pendingVote.projectId 
+                ? { 
+                    ...p, 
+                    hasVoted: true, 
+                    score: pendingVote.score,
+                    voteId: result.voteId,
+                    encryptedVote: encryptedVote.encryptedScore
+                  }
+                : p
+            )
+          );
+          
+          toast({
+            title: "Vote Encrypted & Recorded",
+            description: `Your vote for "${pendingVote.projectName}" has been securely encrypted and submitted to the blockchain.`,
+          });
+        } else {
+          throw new Error(result.error || 'Failed to cast vote');
+        }
+      } catch (error) {
+        console.error('Vote casting failed:', error);
+        toast({
+          title: "Vote Failed",
+          description: error instanceof Error ? error.message : "Failed to cast vote. Please try again.",
+          variant: "destructive"
+        });
+      } finally {
         setVotingProject(null);
         setShowVoteConfirm(false);
         setPendingVote(null);
-        
-        toast({
-          title: "Vote Encrypted & Recorded",
-          description: `Your vote for "${pendingVote.projectName}" has been securely encrypted and submitted.`,
-        });
-      }, 1500);
+      }
     }
   };
 
@@ -118,6 +215,29 @@ export const VotingDashboard = ({ walletAddress, onDisconnect }: VotingDashboard
 
   const totalVoted = projects.filter(p => p.hasVoted).length;
   const votingProgress = (totalVoted / projects.length) * 100;
+
+  const handleRevealResults = async () => {
+    try {
+      const result = await contractVotingUtils.revealResults(0); // Current session
+      
+      if (result.success) {
+        setResultsRevealed(true);
+        toast({
+          title: "Results Revealed",
+          description: "Voting results have been successfully revealed on the blockchain.",
+        });
+      } else {
+        throw new Error(result.error || 'Failed to reveal results');
+      }
+    } catch (error) {
+      console.error('Results reveal failed:', error);
+      toast({
+        title: "Reveal Failed",
+        description: error instanceof Error ? error.message : "Failed to reveal results. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-secondary">
@@ -147,8 +267,17 @@ export const VotingDashboard = ({ walletAddress, onDisconnect }: VotingDashboard
       </header>
 
       <div className="container mx-auto px-4 py-6 space-y-6">
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center space-y-4">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
+              <p className="text-muted-foreground">Loading voting data...</p>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card className="bg-gradient-card border-border/20">
             <CardContent className="p-4 text-center">
               <Users className="w-6 h-6 mx-auto mb-2 text-primary" />
@@ -292,7 +421,7 @@ export const VotingDashboard = ({ walletAddress, onDisconnect }: VotingDashboard
                     </div>
                     
                     <Button 
-                      onClick={() => setResultsRevealed(true)}
+                      onClick={handleRevealResults}
                       className="bg-encrypted hover:bg-encrypted/90 text-encrypted-foreground hover:shadow-glow-encrypted transition-all duration-300"
                       disabled={totalVoted < projects.length}
                     >
@@ -445,6 +574,8 @@ export const VotingDashboard = ({ walletAddress, onDisconnect }: VotingDashboard
             </DialogFooter>
           </DialogContent>
         </Dialog>
+          </>
+        )}
       </div>
     </div>
   );
