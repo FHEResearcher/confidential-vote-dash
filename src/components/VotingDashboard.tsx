@@ -22,8 +22,11 @@ import {
   Loader2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { contractVotingUtils, ProjectInfo, VotingSessionInfo } from "@/lib/contract-utils";
+import { contractVotingUtils, ProjectInfo, VotingSessionInfo, CONFIDENTIAL_VOTING_ABI } from "@/lib/contract-utils";
 import { fheVotingUtils } from "@/lib/fhe-utils";
+import { useZamaInstance } from "@/hooks/useZamaInstance";
+import { useEthersSigner } from "@/hooks/useEthersSigner";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 
 interface Project {
   id: string;
@@ -71,6 +74,11 @@ const mockProjects: Project[] = [
 ];
 
 export const VotingDashboard = ({ walletAddress, onDisconnect }: VotingDashboardProps) => {
+  const { address } = useAccount();
+  const { instance, isLoading: isZamaLoading, error: zamaError } = useZamaInstance();
+  const signerPromise = useEthersSigner();
+  const { writeContractAsync, isPending: isWritePending } = useWriteContract();
+  
   const [projects, setProjects] = useState<Project[]>([]);
   const [votingProject, setVotingProject] = useState<string | null>(null);
   const [resultsRevealed, setResultsRevealed] = useState(false);
@@ -99,7 +107,8 @@ export const VotingDashboard = ({ walletAddress, onDisconnect }: VotingDashboard
           // Load projects for this session
           const projectPromises = sessionInfo.projectIds.map(async (projectId) => {
             const projectInfo = await contractVotingUtils.getProjectInfo(Number(projectId));
-            const hasVoted = await contractVotingUtils.hasUserVoted(walletAddress, 0);
+            // Check if user has voted for this specific project in this session
+            const hasVoted = address ? await contractVotingUtils.hasUserVoted(address, 0, Number(projectId)) : false;
             
             return {
               id: projectId.toString(),
@@ -150,61 +159,89 @@ export const VotingDashboard = ({ walletAddress, onDisconnect }: VotingDashboard
   };
 
   const confirmVote = async () => {
-    if (pendingVote) {
-      setVotingProject(pendingVote.projectId);
+    if (!pendingVote) return;
+    
+    // Check if FHE instance and wallet are ready
+    if (!instance || !address || !signerPromise) {
+      toast({
+        title: "Missing Requirements",
+        description: "Please ensure your wallet is connected and FHE service is initialized.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setVotingProject(pendingVote.projectId);
+    
+    try {
+      // Encrypt vote data using FHE
+      const encryptedVote = await fheVotingUtils.encryptVote({
+        projectId: parseInt(pendingVote.projectId),
+        score: pendingVote.score,
+        sessionId: 0, // Current session
+        voterAddress: address
+      });
+
+      // Generate encrypted data for contract call
+      const externalEuint32 = await fheVotingUtils.generateExternalEuint32(pendingVote.score, address);
       
-      try {
-        // Encrypt vote data using FHE
-        const encryptedVote = await fheVotingUtils.encryptVote({
-          projectId: parseInt(pendingVote.projectId),
-          score: pendingVote.score,
-          sessionId: 0, // Current session
-          voterAddress: walletAddress
-        });
+      console.log('🔄 Calling contract to cast encrypted vote...');
+      console.log('📊 Contract call parameters:', {
+        projectId: parseInt(pendingVote.projectId),
+        sessionId: 0,
+        scoreBytes: externalEuint32.encrypted.substring(0, 20) + '...',
+        proofLength: externalEuint32.proof.length
+      });
 
-        // Cast vote on blockchain
-        const result = await contractVotingUtils.castVote(
-          parseInt(pendingVote.projectId),
-          0, // Current session
-          pendingVote.score,
-          walletAddress
+      // Make actual contract call using wagmi
+      const transactionHash = await writeContractAsync({
+        address: import.meta.env.VITE_VOTING_CONTRACT_ADDRESS as `0x${string}`,
+        abi: CONFIDENTIAL_VOTING_ABI,
+        functionName: 'castVote',
+        args: [
+          BigInt(parseInt(pendingVote.projectId)),
+          BigInt(0), // Current session
+          externalEuint32.encrypted as `0x${string}`,
+          externalEuint32.proof as `0x${string}`
+        ],
+      });
+
+      console.log('✅ Vote cast successfully! Transaction hash:', transactionHash);
+
+      if (transactionHash) {
+        // Update local state - only mark the specific project as voted
+        setProjects(prev => 
+          prev.map(p => 
+            p.id === pendingVote.projectId 
+              ? { 
+                  ...p, 
+                  hasVoted: true, 
+                  score: pendingVote.score,
+                  voteId: parseInt(pendingVote.projectId), // Use projectId as voteId
+                  encryptedVote: encryptedVote.encryptedScore
+                }
+              : p // Keep other projects unchanged
+          )
         );
-
-        if (result.success) {
-          // Update local state
-          setProjects(prev => 
-            prev.map(p => 
-              p.id === pendingVote.projectId 
-                ? { 
-                    ...p, 
-                    hasVoted: true, 
-                    score: pendingVote.score,
-                    voteId: result.voteId,
-                    encryptedVote: encryptedVote.encryptedScore
-                  }
-                : p
-            )
-          );
-          
-          toast({
-            title: "Vote Encrypted & Recorded",
-            description: `Your vote for "${pendingVote.projectName}" has been securely encrypted and submitted to the blockchain.`,
-          });
-        } else {
-          throw new Error(result.error || 'Failed to cast vote');
-        }
-      } catch (error) {
-        console.error('Vote casting failed:', error);
+        
         toast({
-          title: "Vote Failed",
-          description: error instanceof Error ? error.message : "Failed to cast vote. Please try again.",
-          variant: "destructive"
+          title: "Vote Encrypted & Recorded",
+          description: `Your vote for "${pendingVote.projectName}" has been securely encrypted and submitted to the blockchain. Transaction: ${transactionHash.substring(0, 10)}...`,
         });
-      } finally {
-        setVotingProject(null);
-        setShowVoteConfirm(false);
-        setPendingVote(null);
+      } else {
+        throw new Error('Failed to cast vote - no transaction hash returned');
       }
+    } catch (error) {
+      console.error('Vote casting failed:', error);
+      toast({
+        title: "Vote Failed",
+        description: error instanceof Error ? error.message : "Failed to cast vote. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setVotingProject(null);
+      setShowVoteConfirm(false);
+      setPendingVote(null);
     }
   };
 

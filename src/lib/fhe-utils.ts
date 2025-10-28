@@ -1,10 +1,11 @@
 // FHE encryption utilities for confidential voting
-import { FhevmInstance } from 'fhevmjs';
+import { createInstance, initSDK, SepoliaConfig } from '@zama-fhe/relayer-sdk/bundle';
 
 export interface EncryptedVote {
   encryptedScore: string;
   proof: string;
   timestamp: number;
+  handles: string[];
 }
 
 export interface VoteData {
@@ -15,19 +16,29 @@ export interface VoteData {
 }
 
 export class FHEVotingUtils {
-  private fhevm: FhevmInstance | null = null;
+  private instance: any | null = null;
+  private contractAddress: string;
 
-  constructor() {
+  constructor(contractAddress: string) {
+    this.contractAddress = contractAddress;
     this.initializeFHE();
   }
 
   private async initializeFHE() {
     try {
+      console.log('🚀 Initializing FHE Voting Utils...');
+      console.log('📊 Contract address:', this.contractAddress);
+      
       // Initialize FHE instance for client-side encryption
-      // This would typically connect to the FHE network
-      console.log('Initializing FHE instance...');
+      await initSDK();
+      console.log('✅ FHE SDK initialized');
+      
+      this.instance = await createInstance(SepoliaConfig);
+      console.log('✅ FHE instance created successfully');
+      console.log('📊 Available methods:', Object.getOwnPropertyNames(this.instance).filter(name => typeof this.instance[name] === 'function'));
     } catch (error) {
-      console.error('Failed to initialize FHE:', error);
+      console.error('❌ Failed to initialize FHE:', error);
+      throw error;
     }
   }
 
@@ -36,64 +47,142 @@ export class FHEVotingUtils {
    */
   async encryptVote(voteData: VoteData): Promise<EncryptedVote> {
     try {
-      // Simulate FHE encryption process
-      // In a real implementation, this would use actual FHE operations
-      const encryptedScore = await this.encryptScore(voteData.score);
-      const proof = await this.generateProof(voteData);
+      console.log('🚀 Starting vote encryption process...');
+      console.log('📊 Vote data:', voteData);
+
+      if (!this.instance) {
+        throw new Error('FHE instance not initialized');
+      }
+
+      // Validate input parameters
+      if (voteData.score < 1 || voteData.score > 10) {
+        throw new Error('Score must be between 1 and 10');
+      }
+      if (!voteData.voterAddress || voteData.voterAddress === '0x0000000000000000000000000000000000000000') {
+        throw new Error('Invalid voter address');
+      }
+
+      // Create encrypted input for the contract
+      console.log('🔄 Step 1: Creating encrypted input...');
+      const input = this.instance.createEncryptedInput(this.contractAddress, voteData.voterAddress);
+      
+      // Add the score (1-10) as euint32
+      console.log('🔄 Step 2: Adding score to encrypted input...');
+      input.add32(voteData.score);
+      
+      // Encrypt the input
+      console.log('🔄 Step 3: Encrypting data...');
+      const encryptedInput = await input.encrypt();
+      console.log('✅ Encryption completed, handles count:', encryptedInput.handles.length);
+      
+      // Convert handles to proper format (32 bytes)
+      const handles = encryptedInput.handles.map((handle: any) => this.convertToBytes32(handle));
+      
+      console.log('📊 Encryption result:', {
+        handlesCount: handles.length,
+        proofLength: encryptedInput.inputProof.length,
+        timestamp: Date.now()
+      });
       
       return {
-        encryptedScore,
-        proof,
-        timestamp: Date.now()
+        encryptedScore: handles[0],
+        proof: `0x${Array.from(encryptedInput.inputProof)
+          .map((b: number) => b.toString(16).padStart(2, '0'))
+          .join('')}`,
+        timestamp: Date.now(),
+        handles
       };
     } catch (error) {
-      console.error('Failed to encrypt vote:', error);
-      throw new Error('Vote encryption failed');
+      console.error('❌ Failed to encrypt vote:', error);
+      throw new Error(`Vote encryption failed: ${error?.message || 'Unknown error'}`);
     }
   }
 
   /**
-   * Encrypt the score value using FHE
+   * Convert FHE handle to bytes32 format
    */
-  private async encryptScore(score: number): Promise<string> {
-    // Simulate FHE encryption
-    // In real implementation, this would use FHE.asEuint32() equivalent
-    const encrypted = btoa(JSON.stringify({
-      value: score,
-      encrypted: true,
-      timestamp: Date.now()
-    }));
-    
-    return encrypted;
+  private convertToBytes32(handle: any): string {
+    if (handle instanceof Uint8Array) {
+      const hex = Array.from(handle)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+      return `0x${hex}`;
+    } else if (typeof handle === 'string') {
+      return handle.startsWith('0x') ? handle : `0x${handle}`;
+    } else if (Array.isArray(handle)) {
+      const hex = handle.map(b => b.toString(16).padStart(2, '0')).join('');
+      return `0x${hex}`;
+    }
+    return `0x${handle.toString()}`;
   }
 
   /**
-   * Generate proof for the encrypted vote
+   * Decrypt vote data using FHE handles
    */
-  private async generateProof(voteData: VoteData): Promise<string> {
-    // Simulate proof generation
-    // In real implementation, this would generate actual cryptographic proof
-    const proofData = {
-      voter: voteData.voterAddress,
-      projectId: voteData.projectId,
-      sessionId: voteData.sessionId,
-      timestamp: Date.now()
-    };
-    
-    return btoa(JSON.stringify(proofData));
-  }
-
-  /**
-   * Decrypt vote data (for results reveal)
-   */
-  async decryptVote(encryptedVote: EncryptedVote): Promise<number> {
+  async decryptVote(handleContractPairs: Array<{handle: string, contractAddress: string}>): Promise<Record<string, any>> {
     try {
-      // Simulate FHE decryption
-      const decrypted = JSON.parse(atob(encryptedVote.encryptedScore));
-      return decrypted.value;
+      if (!this.instance) {
+        throw new Error('FHE instance not initialized');
+      }
+
+      const result = await this.instance.userDecrypt(handleContractPairs);
+      return result;
     } catch (error) {
       console.error('Failed to decrypt vote:', error);
       throw new Error('Vote decryption failed');
+    }
+  }
+
+  /**
+   * Generate external euint32 for contract interaction
+   */
+  async generateExternalEuint32(score: number, voterAddress: string): Promise<{
+    encrypted: string;
+    proof: string;
+  }> {
+    try {
+      console.log('🚀 Generating external euint32...');
+      console.log('📊 Parameters:', { score, voterAddress });
+
+      if (!this.instance) {
+        throw new Error('FHE instance not initialized');
+      }
+
+      // Validate input parameters
+      if (score < 1 || score > 10) {
+        throw new Error('Score must be between 1 and 10');
+      }
+      if (!voterAddress || voterAddress === '0x0000000000000000000000000000000000000000') {
+        throw new Error('Invalid voter address');
+      }
+
+      console.log('🔄 Step 1: Creating encrypted input...');
+      const input = this.instance.createEncryptedInput(this.contractAddress, voterAddress);
+      
+      console.log('🔄 Step 2: Adding score to encrypted input...');
+      input.add32(score);
+      
+      console.log('🔄 Step 3: Encrypting data...');
+      const encryptedInput = await input.encrypt();
+      console.log('✅ Encryption completed');
+
+      const encrypted = this.convertToBytes32(encryptedInput.handles[0]);
+      const proof = `0x${Array.from(encryptedInput.inputProof)
+        .map((b: number) => b.toString(16).padStart(2, '0'))
+        .join('')}`;
+
+      console.log('📊 External euint32 result:', {
+        encrypted: encrypted.substring(0, 20) + '...',
+        proofLength: proof.length
+      });
+
+      return {
+        encrypted,
+        proof
+      };
+    } catch (error) {
+      console.error('❌ Failed to generate external euint32:', error);
+      throw error;
     }
   }
 
@@ -102,8 +191,9 @@ export class FHEVotingUtils {
    */
   async verifyProof(proof: string, expectedVoter: string): Promise<boolean> {
     try {
-      const proofData = JSON.parse(atob(proof));
-      return proofData.voter === expectedVoter;
+      // In a real implementation, this would verify the cryptographic proof
+      // For now, we'll do basic validation
+      return proof.startsWith('0x') && proof.length > 10;
     } catch (error) {
       console.error('Failed to verify proof:', error);
       return false;
@@ -111,26 +201,14 @@ export class FHEVotingUtils {
   }
 
   /**
-   * Generate external euint32 for contract interaction
+   * Get instance status
    */
-  async generateExternalEuint32(score: number): Promise<{
-    encrypted: string;
-    proof: string;
-  }> {
-    const encryptedScore = await this.encryptScore(score);
-    const proof = await this.generateProof({
-      projectId: 0,
-      score,
-      sessionId: 0,
-      voterAddress: ''
-    });
-
-    return {
-      encrypted: encryptedScore,
-      proof
-    };
+  isInitialized(): boolean {
+    return this.instance !== null;
   }
 }
 
 // Export singleton instance
-export const fheVotingUtils = new FHEVotingUtils();
+export const fheVotingUtils = new FHEVotingUtils(
+  import.meta.env.VITE_VOTING_CONTRACT_ADDRESS || '0x89251B8EccFde7380B2228b00C4c6D79F54164d3'
+);

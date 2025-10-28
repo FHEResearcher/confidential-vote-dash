@@ -1,6 +1,7 @@
 // Contract interaction utilities for confidential voting
-import { Contract, parseEther, formatEther } from 'viem';
-import { useWriteContract, useReadContract, useAccount } from 'wagmi';
+import { Contract } from 'viem';
+import { createPublicClient, http } from 'viem';
+import { sepolia } from 'viem/chains';
 import { fheVotingUtils, VoteData, EncryptedVote } from './fhe-utils';
 
 // Contract ABI for ConfidentialVoting
@@ -104,9 +105,9 @@ export const CONFIDENTIAL_VOTING_ABI = [
         "type": "uint256"
       },
       {
-        "internalType": "bytes",
+        "internalType": "bytes32",
         "name": "score",
-        "type": "bytes"
+        "type": "bytes32"
       },
       {
         "internalType": "bytes",
@@ -319,30 +320,35 @@ export const CONFIDENTIAL_VOTING_ABI = [
     "stateMutability": "view",
     "type": "function"
   },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "user",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "sessionId",
-        "type": "uint256"
-      }
-    ],
-    "name": "hasUserVoted",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "user",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "sessionId",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "projectId",
+          "type": "uint256"
+        }
+      ],
+      "name": "hasUserVoted",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
   {
     "inputs": [],
     "name": "getProjectCount",
@@ -364,6 +370,30 @@ export const CONFIDENTIAL_VOTING_ABI = [
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "projectId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getProjectEncryptedTotals",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "totalVotesHandle",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "totalScoreHandle",
+        "type": "bytes32"
       }
     ],
     "stateMutability": "view",
@@ -397,9 +427,27 @@ export interface VotingSessionInfo {
 export class ContractVotingUtils {
   private contractAddress: string;
   private contract: Contract | null = null;
+  private client = createPublicClient({
+    chain: sepolia,
+    transport: http(process.env.VITE_SEPOLIA_RPC_URL || 'https://1rpc.io/sepolia')
+  });
 
   constructor(contractAddress: string) {
     this.contractAddress = contractAddress;
+  }
+
+  /**
+   * Read contract data using wagmi's readContract
+   */
+  private async readContract(params: any) {
+    return {
+      data: await this.client.readContract({
+        address: params.address,
+        abi: params.abi,
+        functionName: params.functionName,
+        args: params.args
+      })
+    };
   }
 
   /**
@@ -427,21 +475,41 @@ export class ContractVotingUtils {
       const encryptedVote = await fheVotingUtils.encryptVote(voteData);
       
       // Prepare contract call data
-      const externalEuint32 = await fheVotingUtils.generateExternalEuint32(score);
+      const externalEuint32 = await fheVotingUtils.generateExternalEuint32(score, voterAddress);
       
-      // Convert to bytes for contract call
-      const scoreBytes = new TextEncoder().encode(externalEuint32.encrypted);
-      const proofBytes = new TextEncoder().encode(externalEuint32.proof);
+      // Convert to proper format for contract call
+      const scoreBytes = externalEuint32.encrypted as `0x${string}`;
+      const proofBytes = externalEuint32.proof as `0x${string}`;
 
-      // This would be the actual contract call
-      // const result = await contract.castVote(projectId, sessionId, scoreBytes, proofBytes);
+      console.log('🔄 Calling contract to cast encrypted vote...');
+      console.log('📊 Contract call parameters:', {
+        projectId,
+        sessionId,
+        scoreBytes: scoreBytes.substring(0, 20) + '...',
+        proofLength: proofBytes.length
+      });
+
+      // Make actual contract call using wagmi
+      const { writeContractAsync } = await import('wagmi');
       
-      // Simulate successful vote
-      const voteId = Math.floor(Math.random() * 1000000);
+      const result = await writeContractAsync({
+        address: this.contractAddress as `0x${string}`,
+        abi: CONFIDENTIAL_VOTING_ABI,
+        functionName: 'castVote',
+        args: [
+          BigInt(projectId),
+          BigInt(sessionId),
+          scoreBytes,
+          proofBytes
+        ],
+      });
+
+      console.log('✅ Vote cast successfully! Transaction hash:', result);
       
       return {
         success: true,
-        voteId
+        transactionHash: result,
+        voteId: projectId // Use projectId as voteId for now
       };
     } catch (error) {
       console.error('Failed to cast vote:', error);
@@ -547,21 +615,29 @@ export class ContractVotingUtils {
    */
   async getProjectInfo(projectId: number): Promise<ProjectInfo | null> {
     try {
-      // This would be the actual contract call
-      // const result = await contract.getProjectInfo(projectId);
+      // Use wagmi's useReadContract hook equivalent
+      const { data: result } = await this.readContract({
+        address: this.contractAddress as `0x${string}`,
+        abi: CONFIDENTIAL_VOTING_ABI,
+        functionName: 'getProjectInfo',
+        args: [BigInt(projectId)]
+      });
       
-      // Return mock data for now
-      return {
-        name: `Project ${projectId}`,
-        description: `Description for project ${projectId}`,
-        team: `Team ${projectId}`,
-        category: 'Technology',
-        creator: '0x0000000000000000000000000000000000000000',
-        startTime: BigInt(Date.now()),
-        isActive: true,
-        totalVotes: 0,
-        totalScore: 0
-      };
+      if (result) {
+        return {
+          name: result[0] || `Project ${projectId}`,
+          description: result[1] || `Description for project ${projectId}`,
+          team: result[2] || `Team ${projectId}`,
+          category: result[3] || 'Technology',
+          creator: result[4] || '0x0000000000000000000000000000000000000000',
+          startTime: result[5] || BigInt(Date.now()),
+          isActive: result[6] || true,
+          totalVotes: result[7] || 0,
+          totalScore: result[8] || 0
+        };
+      }
+      
+      return null;
     } catch (error) {
       console.error('Failed to get project info:', error);
       return null;
@@ -573,20 +649,28 @@ export class ContractVotingUtils {
    */
   async getVotingSessionInfo(sessionId: number): Promise<VotingSessionInfo | null> {
     try {
-      // This would be the actual contract call
-      // const result = await contract.getVotingSessionInfo(sessionId);
+      // Use wagmi's useReadContract hook equivalent
+      const { data: result } = await this.readContract({
+        address: this.contractAddress as `0x${string}`,
+        abi: CONFIDENTIAL_VOTING_ABI,
+        functionName: 'getVotingSessionInfo',
+        args: [BigInt(sessionId)]
+      });
       
-      // Return mock data for now
-      return {
-        title: `Voting Session ${sessionId}`,
-        description: `Description for session ${sessionId}`,
-        organizer: '0x0000000000000000000000000000000000000000',
-        startTime: BigInt(Date.now()),
-        endTime: BigInt(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
-        isActive: true,
-        resultsRevealed: false,
-        projectIds: [BigInt(1), BigInt(2), BigInt(3)]
-      };
+      if (result) {
+        return {
+          title: result[0] || `Voting Session ${sessionId}`,
+          description: result[1] || `Description for session ${sessionId}`,
+          organizer: result[2] || '0x0000000000000000000000000000000000000000',
+          startTime: result[3] || BigInt(Date.now()),
+          endTime: result[4] || BigInt(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          isActive: result[5] || true,
+          resultsRevealed: result[6] || false,
+          projectIds: result[7] || [BigInt(1), BigInt(2), BigInt(3)]
+        };
+      }
+      
+      return null;
     } catch (error) {
       console.error('Failed to get voting session info:', error);
       return null;
@@ -596,13 +680,15 @@ export class ContractVotingUtils {
   /**
    * Check if user has voted in a session
    */
-  async hasUserVoted(userAddress: string, sessionId: number): Promise<boolean> {
+  async hasUserVoted(userAddress: string, sessionId: number, projectId: number): Promise<boolean> {
     try {
-      // This would be the actual contract call
-      // const result = await contract.hasUserVoted(userAddress, sessionId);
-      
-      // Return mock data for now
-      return false;
+      const { data } = await this.readContract({
+        address: this.contractAddress as `0x${string}`,
+        abi: CONFIDENTIAL_VOTING_ABI,
+        functionName: 'hasUserVoted',
+        args: [userAddress as `0x${string}`, BigInt(sessionId), BigInt(projectId)]
+      });
+      return Boolean(data);
     } catch (error) {
       console.error('Failed to check vote status:', error);
       return false;
@@ -614,11 +700,12 @@ export class ContractVotingUtils {
    */
   async getProjectCount(): Promise<number> {
     try {
-      // This would be the actual contract call
-      // const result = await contract.getProjectCount();
-      
-      // Return mock data for now
-      return 3;
+      const { data } = await this.readContract({
+        address: this.contractAddress as `0x${string}`,
+        abi: CONFIDENTIAL_VOTING_ABI,
+        functionName: 'getProjectCount'
+      });
+      return Number(data ?? 0);
     } catch (error) {
       console.error('Failed to get project count:', error);
       return 0;
@@ -630,19 +717,49 @@ export class ContractVotingUtils {
    */
   async getSessionCount(): Promise<number> {
     try {
-      // This would be the actual contract call
-      // const result = await contract.getSessionCount();
+      // Use wagmi's useReadContract hook equivalent
+      const { data: result } = await this.readContract({
+        address: this.contractAddress as `0x${string}`,
+        abi: CONFIDENTIAL_VOTING_ABI,
+        functionName: 'getSessionCount'
+      });
       
-      // Return mock data for now
-      return 1;
+      return result ? Number(result) : 0;
     } catch (error) {
       console.error('Failed to get session count:', error);
       return 0;
+    }
+  }
+
+  /**
+   * Get encrypted project totals for decryption
+   */
+  async getProjectEncryptedTotals(projectId: number): Promise<{
+    totalVotesHandle: string;
+    totalScoreHandle: string;
+  } | null> {
+    try {
+      const { data } = await this.readContract({
+        address: this.contractAddress as `0x${string}`,
+        abi: CONFIDENTIAL_VOTING_ABI,
+        functionName: 'getProjectEncryptedTotals',
+        args: [BigInt(projectId)]
+      });
+      if (data && Array.isArray(data) && data.length === 2) {
+        return {
+          totalVotesHandle: data[0] as string,
+          totalScoreHandle: data[1] as string
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('Failed to get encrypted totals:', error);
+      return null;
     }
   }
 }
 
 // Export singleton instance
 export const contractVotingUtils = new ContractVotingUtils(
-  import.meta.env.VITE_VOTING_CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000'
+  import.meta.env.VITE_VOTING_CONTRACT_ADDRESS || '0x89251B8EccFde7380B2228b00C4c6D79F54164d3'
 );

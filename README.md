@@ -42,7 +42,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Visit `http://localhost:5173` and connect your wallet to start voting!
+Visit `http://localhost:8080` and connect your wallet to start voting!
 
 ## 🏗️ Architecture
 
@@ -63,33 +63,48 @@ graph TB
 | Layer | Technology | Purpose |
 |-------|------------|---------|
 | **Frontend** | React + TypeScript + Vite | Modern UI framework |
-| **Styling** | Tailwind CSS + shadcn/ui | Beautiful, responsive design |
-| **Blockchain** | Wagmi + Viem + RainbowKit | Web3 integration |
-| **Encryption** | FHE (Fully Homomorphic) | Privacy-preserving computation |
-| **Network** | Ethereum Sepolia | Testnet deployment |
-| **Deployment** | Vercel | Fast, global hosting |
+| **Styling** | Tailwind CSS + Radix UI | Component library |
+| **Wallet** | Wagmi v2 + RainbowKit | Web3 wallet integration |
+| **FHE** | @zama-fhe/relayer-sdk | Client-side encryption |
+| **Blockchain** | Solidity + FHEVM | Smart contract with FHE |
+| **Network** | Sepolia Testnet | Ethereum test network |
 
-## 📋 Features
+## 🔐 FHE Encryption Flow
 
-### 🗳️ Voting System
-- **Anonymous Voting**: Your identity is never linked to your vote
-- **Encrypted Scores**: Vote values remain hidden until reveal
-- **Real-time Updates**: Live progress tracking
-- **Result Verification**: Cryptographic proof of integrity
+### 1. Client-Side Encryption
+```typescript
+// Create encrypted input
+const input = instance.createEncryptedInput(contractAddress, voterAddress);
+input.add32(score); // Add vote score (1-10)
 
-### 🔐 Security Features
-- **End-to-End Encryption**: Votes encrypted from submission to aggregation
-- **Decentralized Storage**: No single point of failure
-- **Audit Trail**: Immutable voting records
-- **Reputation System**: Voter credibility tracking
+// Encrypt the data
+const encryptedInput = await input.encrypt();
+```
 
-### 🎨 User Experience
-- **Intuitive Interface**: Clean, modern design
-- **Mobile Responsive**: Works on all devices
-- **Wallet Integration**: Seamless Web3 connection
-- **Progress Tracking**: Visual voting status
+### 2. Smart Contract Processing
+```solidity
+// Receive encrypted vote
+euint32 internalScore = FHE.fromExternal(score, inputProof);
 
-## 🛠️ Development
+// Update encrypted totals
+projects[projectId].totalVotes = FHE.add(projects[projectId].totalVotes, FHE.asEuint32(1));
+projects[projectId].totalScore = FHE.add(projects[projectId].totalScore, internalScore);
+
+// Set ACL permissions
+FHE.allow(projects[projectId].totalVotes, msg.sender);
+```
+
+### 3. Result Decryption
+```typescript
+// Decrypt aggregated results
+const handleContractPairs = [
+  { handle: encryptedData.totalVotes, contractAddress: CONTRACT_ADDRESS },
+  { handle: encryptedData.totalScore, contractAddress: CONTRACT_ADDRESS }
+];
+const result = await instance.userDecrypt(handleContractPairs);
+```
+
+## 🚀 Deployment
 
 ### Smart Contract Deployment
 
@@ -99,70 +114,16 @@ npm run compile
 
 # Deploy to Sepolia
 npm run deploy:sepolia
-
-# Deploy locally
-npm run deploy:local
 ```
 
-### Environment Variables
-
-Create a `.env` file with:
-
-```env
-# Blockchain Configuration
-VITE_CHAIN_ID=11155111
-VITE_RPC_URL=https://sepolia.infura.io/v3/YOUR_KEY
-VITE_WALLET_CONNECT_PROJECT_ID=YOUR_PROJECT_ID
-
-# Contract Addresses
-VITE_VOTING_CONTRACT_ADDRESS=0x...
-VITE_FHE_CONTRACT_ADDRESS=0x...
-```
-
-## 📊 Usage Examples
-
-### Creating a Voting Session
-
-```typescript
-// Create a new voting session
-const sessionId = await createVotingSession({
-  title: "Best DeFi Project 2024",
-  description: "Vote for the most innovative DeFi protocol",
-  duration: 7 * 24 * 60 * 60, // 7 days
-  projectIds: [1, 2, 3, 4, 5]
-});
-```
-
-### Casting an Encrypted Vote
-
-```typescript
-// Cast a vote with FHE encryption
-const voteId = await castVote({
-  projectId: 1,
-  sessionId: sessionId,
-  score: encryptedScore, // FHE encrypted
-  inputProof: proof
-});
-```
-
-## 🚀 Deployment
-
-### Vercel (Recommended)
-
-1. **Connect Repository**: Link your GitHub repo to Vercel
-2. **Configure Environment**: Add all required environment variables
-3. **Deploy**: Automatic deployment on every push
-
-See [VERCEL_DEPLOYMENT.md](./VERCEL_DEPLOYMENT.md) for detailed instructions.
-
-### Manual Deployment
+### Frontend Deployment
 
 ```bash
 # Build for production
 npm run build
 
-# Deploy to your hosting provider
-# Upload the 'dist' folder
+# Deploy to Vercel
+vercel --prod
 ```
 
 ## 🔍 Smart Contract Details
@@ -180,8 +141,29 @@ contract ConfidentialVoting {
     function getProjectInfo(uint256 projectId) external view returns (...);
     function getVotingSessionInfo(uint256 sessionId) external view returns (...);
     function hasUserVoted(address user, uint256 sessionId) external view returns (bool);
+    
+    // FHE-specific functions
+    function getProjectEncryptedTotals(uint256 projectId) external view returns (bytes32, bytes32);
+    function requestResultsDecryption(uint256 sessionId) external;
 }
 ```
+
+## 🎯 Key Features
+
+### Privacy Protection
+- **FHE Encryption**: All votes encrypted end-to-end
+- **Zero-Knowledge**: Individual choices never revealed
+- **ACL Control**: Precise access control for decryption
+
+### Transparency & Verifiability
+- **Blockchain Records**: All operations recorded on-chain
+- **Immutable Results**: Vote results cannot be tampered with
+- **Public Verification**: Anyone can verify the process
+
+### User Experience
+- **Modern UI**: Clean, intuitive interface
+- **Wallet Integration**: Seamless Web3 wallet connection
+- **Real-time Updates**: Instant feedback and status updates
 
 ## 🤝 Contributing
 
@@ -201,48 +183,19 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 - [ ] **Advanced Voting**: Ranked choice, quadratic voting
 - [ ] **Mobile App**: React Native implementation
 - [ ] **Governance Integration**: DAO voting mechanisms
-- [ ] **Analytics Dashboard**: Voting insights and statistics
+- [ ] **Analytics Dashboard**: Voting statistics and insights
 
-## 🐛 Troubleshooting
+## 🔗 Links
 
-### Common Issues
-
-| Issue | Solution |
-|-------|----------|
-| Wallet not connecting | Check network (Sepolia), ensure wallet is unlocked |
-| Contract interaction fails | Verify contract address, check gas fees |
-| Build errors | Clear node_modules, reinstall dependencies |
-| Environment variables not working | Ensure variables start with `VITE_` |
-
-### Getting Help
-
-- 📖 **Documentation**: Check our [Wiki](https://github.com/FHEResearcher/confidential-vote-dash/wiki)
-- 🐛 **Bug Reports**: [Create an issue](https://github.com/FHEResearcher/confidential-vote-dash/issues)
-- 💬 **Discussions**: [Join our community](https://github.com/FHEResearcher/confidential-vote-dash/discussions)
+- [Live Demo](https://confidential-vote-dash.vercel.app)
+- [Documentation](https://docs.confidential-vote-dash.com)
+- [Zama FHE Docs](https://docs.zama.ai/)
+- [FHEVM Documentation](https://docs.fhevm.org/)
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
-
-- **Zama**: For FHE technology and tooling
-- **RainbowKit**: For excellent wallet integration
-- **shadcn/ui**: For beautiful UI components
-- **Vercel**: For seamless deployment platform
-
-## 📞 Contact
-
-- **GitHub**: [@FHEResearcher](https://github.com/FHEResearcher)
-- **Email**: [Contact us](mailto:contact@example.com)
-- **Twitter**: [@FHEResearcher](https://twitter.com/FHEResearcher)
-
 ---
 
-<div align="center">
-
-**Built with ❤️ for the future of private voting**
-
-[⭐ Star this repo](https://github.com/FHEResearcher/confidential-vote-dash) • [🐛 Report Bug](https://github.com/FHEResearcher/confidential-vote-dash/issues) • [💡 Request Feature](https://github.com/FHEResearcher/confidential-vote-dash/issues)
-
-</div>
+**Built with ❤️ by the FHE Research Team**

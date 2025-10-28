@@ -8,9 +8,9 @@ module.exports = {
     settings: {
       optimizer: {
         enabled: true,
-        runs: 200,
-        viaIR: true  // Required for FHE to avoid "Stack too deep" errors
-      }
+        runs: 200
+      },
+      viaIR: true  // Required for FHE to avoid "Stack too deep" errors
     }
   },
   networks: {
