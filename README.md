@@ -6,7 +6,7 @@ A fully homomorphic encryption (FHE) powered confidential voting system built on
 
 [![Confidential Vote Dash Demo](confidential-vote-dash.mov)](confidential-vote-dash.mov)
 
-**Video Size**: 2.1MB | **Duration**: 1:31 | **Format**: MOV | **Resolution**: 1920x1080
+**Video Size**: 23.5MB | **Duration**: 1:48 | **Format**: MOV | **Resolution**: 1920x1080 | **Frame Rate**: 30fps | **Bitrate**: 4Mbps
 
 ## 🔒 Key Features
 
