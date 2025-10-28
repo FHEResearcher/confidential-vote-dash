@@ -88,7 +88,7 @@ contract ConfidentialVoting is SepoliaConfig {
         uint256 projectId = projectCounter++;
         
         projects[projectId] = Project({
-            projectId: FHE.asEuint32(0), // Will be set properly later
+            projectId: FHE.asEuint32(uint32(projectId)),
             name: _name,
             description: _description,
             team: _team,
@@ -178,6 +178,7 @@ contract ConfidentialVoting is SepoliaConfig {
         projects[projectId].totalScore = FHE.add(projects[projectId].totalScore, internalScore);
         
         // Set ACL permissions for decryption
+        // Note: FHE.allowThis and FHE.allow can be called multiple times safely
         FHE.allowThis(projects[projectId].totalVotes);
         FHE.allowThis(projects[projectId].totalScore);
         FHE.allow(projects[projectId].totalVotes, msg.sender);
