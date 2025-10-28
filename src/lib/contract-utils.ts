@@ -761,5 +761,5 @@ export class ContractVotingUtils {
 
 // Export singleton instance
 export const contractVotingUtils = new ContractVotingUtils(
-  import.meta.env.VITE_VOTING_CONTRACT_ADDRESS || '0x0Cc44332D13e849201e9b2C91827F89bE44136C6'
+  import.meta.env.VITE_VOTING_CONTRACT_ADDRESS || '0x2c6216Ac4d65d7d2720Cc45c11Da554CdB06Dcba'
 );
