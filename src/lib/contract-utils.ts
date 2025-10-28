@@ -429,7 +429,7 @@ export class ContractVotingUtils {
   private contract: Contract | null = null;
   private client = createPublicClient({
     chain: sepolia,
-    transport: http(process.env.VITE_SEPOLIA_RPC_URL || 'https://1rpc.io/sepolia')
+    transport: http(import.meta.env.VITE_SEPOLIA_RPC_URL || 'https://1rpc.io/sepolia')
   });
 
   constructor(contractAddress: string) {

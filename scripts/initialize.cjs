@@ -7,7 +7,7 @@ async function main() {
   console.log("Using account:", deployer.address);
   
   // Get the deployed contract
-  const contractAddress = "0x0Cc44332D13e849201e9b2C91827F89bE44136C6";
+  const contractAddress = "0x2c6216Ac4d65d7d2720Cc45c11Da554CdB06Dcba";
   const ConfidentialVoting = await hre.ethers.getContractFactory("ConfidentialVoting");
   const contract = ConfidentialVoting.attach(contractAddress);
   
