@@ -1,4 +1,5 @@
 // FHE encryption utilities for confidential voting
+import { createInstance, initSDK, SepoliaConfig } from '@zama-fhe/relayer-sdk/bundle';
 
 export interface EncryptedVote {
   encryptedScore: string;
@@ -27,20 +28,6 @@ export class FHEVotingUtils {
     try {
       console.log('🚀 Initializing FHE Voting Utils...');
       console.log('📊 Contract address:', this.contractAddress);
-      
-      // Wait for FHE SDK to be loaded from CDN
-      let attempts = 0;
-      const maxAttempts = 50;
-      while (attempts < maxAttempts && !(window as any).Fhevm) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        attempts++;
-      }
-      
-      if (!(window as any).Fhevm) {
-        throw new Error('FHE SDK failed to load from CDN');
-      }
-      
-      const { createInstance, initSDK, SepoliaConfig } = (window as any).Fhevm;
       
       // Initialize FHE instance for client-side encryption
       await initSDK();
