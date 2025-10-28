@@ -16,18 +16,6 @@
     <meta name="twitter:site" content="@FHEResearcher" />
     <meta name="twitter:image" content="/favicon.svg" />
     
-    <!-- FHE SDK CDN Script - Required for FHE functionality -->
-    <script>
-      // Prevent ethereum property redefinition
-      if (window.ethereum && !window.ethereum.isMetaMask) {
-        Object.defineProperty(window, 'ethereum', {
-          value: window.ethereum,
-          writable: false,
-          configurable: false
-        });
-      }
-    </script>
-    <script src="https://cdn.zama.ai/relayer-sdk-js/0.2.0/relayer-sdk-js.umd.cjs" type="text/javascript"></script>
   </head>
 
   <body>
