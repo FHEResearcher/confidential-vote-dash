@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { createInstance, initSDK, SepoliaConfig } from '@zama-fhe/relayer-sdk/bundle';
 
 export interface ZamaInstance {
   instance: any | null;
@@ -40,11 +39,29 @@ export function useZamaInstance(): ZamaInstance {
         throw new Error('Ethereum provider not found. Please install MetaMask or another Web3 wallet.');
       }
 
-      console.log('🔄 Step 1: Initializing FHE SDK...');
+      console.log('🔄 Step 1: Loading FHE SDK from CDN...');
+      
+      // Wait for FHE SDK to be loaded from CDN
+      let attempts = 0;
+      const maxAttempts = 50;
+      while (attempts < maxAttempts && !(window as any).Fhevm) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
+      
+      if (!(window as any).Fhevm) {
+        throw new Error('FHE SDK failed to load from CDN');
+      }
+      
+      console.log('✅ FHE SDK loaded from CDN');
+      
+      const { createInstance, initSDK, SepoliaConfig } = (window as any).Fhevm;
+      
+      console.log('🔄 Step 2: Initializing FHE SDK...');
       await initSDK();
       console.log('✅ FHE SDK initialized successfully');
 
-      console.log('🔄 Step 2: Creating FHE instance with Sepolia config...');
+      console.log('🔄 Step 3: Creating FHE instance with Sepolia config...');
       const config = {
         ...SepoliaConfig,
         network: window.ethereum
